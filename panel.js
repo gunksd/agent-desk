@@ -500,27 +500,42 @@ async function loadAlerts() {
 async function loadStatus() {
   try {
     const x = await (await fetch('/status')).json();
-    const live = x.data?.live, st = x.data?.status || {};
+    const live = x.data?.live, st = x.data?.status || {}, snipe = x.data?.kind === 'stock_snipe';
     const chip = $('monChip');
     chip.className = 'chip' + (live ? (st.armed ? ' armed' : ' live') : ' off');
     $('monChipText').textContent = live ? (st.armed ? '监控·实盘' : '监控·模拟') : '监控离线';
-    // dashboard
     const ring = $('monRing'); ring.className = 'mon-ring' + (live ? ' live' : '');
-    $('monSub').textContent = live
-      ? `${st.presetName || '模板'} · preset ${st.preset}`
-      : '监控进程未运行（命令行启动 four_watch.mjs）';
+    $('monTitle') && ($('monTitle').textContent = snipe ? '股票底池狙击' : '抢购监控');
+    $('monSub').textContent = !live ? '监控进程未运行'
+      : snipe ? `Agent ID 模板 · 底池 ${(st.stocks || []).join(' / ')} · 钱包 ${short(st.wallet || '')}`
+      : `${st.presetName || '模板'} · preset ${st.preset}`;
     $('monPills').innerHTML = live
       ? `<span class="pill ${st.armed ? 'arm' : 'dry'}">${st.armed ? '实盘' : '模拟'}</span><span class="pill on">运行中</span>`
       : `<span class="pill off">离线</span>`;
-    const stats = [
+    const hb = st.ts ? new Date(st.ts).toLocaleTimeString() : '—';
+    const stats = snipe ? [
+      ['每个买入', Number(st.target || 0).toLocaleString() + ' 个（1%）', 'gold'],
+      ['已买 / 上限', `${st.bought ?? 0} / ${st.max ?? '—'}`, ''],
+      ['已转出', st.forwarded ?? 0, ''],
+      ['命中 / 跳过', `${st.hits ?? 0} / ${st.skipped ?? 0}`, ''],
+      ['最新区块', st.head ? st.head.toLocaleString() : '—', ''],
+      ['轮询 · WSS', `${st.pollMs ?? '—'}ms · ${st.wss ?? 0} 路`, ''],
+      ['转出地址', short(st.forwardTo || ''), ''],
+      ['心跳', hb, ''],
+    ] : [
       ['买入预算', (st.budgetBnb ?? '—') + ' BNB', 'gold'],
       ['最新区块', st.head ? st.head.toLocaleString() : '—', ''],
       ['已买入', st.bought ?? 0, ''],
       ['已跳过', st.skipped ?? 0, ''],
       ['WSS 连接', (st.wss ?? 0) + ' 路', ''],
-      ['心跳', st.ts ? new Date(st.ts).toLocaleTimeString() : '—', ''],
+      ['心跳', hb, ''],
     ];
     $('monStats').innerHTML = stats.map(([k, v, c]) => `<div class="c"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`).join('');
+    const rec = $('monRecent');
+    if (rec) rec.innerHTML = snipe && (st.recent || []).length
+      ? st.recent.map(h => `<div class="li"><div><div class="pair-l">${h.sym} 底池 · ${h.result}</div><div class="meta mono">${short(h.token)}${h.reason ? ' · ' + h.reason : ''}</div></div>`
+        + (h.tx && h.tx.startsWith('0x') ? `<a class="copyca hashlink" href="https://bscscan.com/tx/${h.tx}" target="_blank" rel="noopener">Tx ↗</a>` : '') + `</div>`).join('')
+      : (snipe ? '<div class="empty">还没有命中股票底池的新币</div>' : '');
   } catch {
     $('monChip').className = 'chip off'; $('monChipText').textContent = '监控离线';
   }

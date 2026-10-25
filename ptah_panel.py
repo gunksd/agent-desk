@@ -280,14 +280,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send({'success': False, 'error': {'message': str(e)}}, 502)
         if path == '/status':
-            sp = Path.home() / '.config/four-watch-status.json'
-            try:
-                st = json.loads(sp.read_text()) if sp.exists() else None
-            except Exception:
-                st = None
-            # consider the watcher live if it wrote a heartbeat within 20s
-            live = bool(st and (__import__('time').time() * 1000 - st.get('ts', 0) < 20000))
-            return self.send({'success': True, 'data': {'live': live, 'status': st}})
+            # Prefer the stock-pool sniper (it may run on a separate wallet); fall
+            # back to the original four_watch monitor. Live = heartbeat within 20s.
+            now_ms = __import__('time').time() * 1000
+            def _read(name):
+                fp = Path.home() / '.config' / name
+                try:
+                    return json.loads(fp.read_text()) if fp.exists() else None
+                except Exception:
+                    return None
+            sn, fw = _read('stock-snipe-status.json'), _read('four-watch-status.json')
+            sn_live = bool(sn and now_ms - sn.get('ts', 0) < 20000)
+            fw_live = bool(fw and now_ms - fw.get('ts', 0) < 20000)
+            if sn and (sn_live or not fw_live):
+                return self.send({'success': True, 'data': {'live': sn_live, 'kind': 'stock_snipe', 'status': sn}})
+            return self.send({'success': True, 'data': {'live': fw_live, 'kind': 'four_watch', 'status': fw}})
         if path == '/events':
             ep = Path.home() / '.config/four-watch-events.json'
             try:

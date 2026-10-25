@@ -358,12 +358,14 @@ dialog::backdrop{background:oklch(40% .03 70/.3);backdrop-filter:blur(3px)}
         <div class="mon-hero">
           <div class="mon-ring" id="monRing">🎯</div>
           <div>
-            <div class="mon-title">抢购监控</div>
+            <div class="mon-title" id="monTitle">抢购监控</div>
             <div class="mon-sub" id="monSub">读取状态…</div>
           </div>
           <div style="margin-left:auto;display:flex;gap:7px" id="monPills"></div>
         </div>
         <div class="statgrid" id="monStats"></div>
+        <div class="hd" style="margin:20px 0 6px"><h2>最近命中</h2></div>
+        <div class="list" id="monRecent"></div>
       </section>
       <div class="col">
         <section class="card pad">
