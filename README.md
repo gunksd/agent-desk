@@ -59,6 +59,7 @@ four_watch.mjs  (独立后台进程)
 | `openfour_check.mjs` | Four.meme V12 模板只读核查（注册/preset/NFT/能否买模拟） |
 | `four_watch.mjs` | 抢购监控 + 自动买入 + 10 倍提醒 + 状态/事件落盘 |
 | `AGENT钱包工作台prompt.txt` | 复刻用的完整提示词，丢给 AI 即可从零做出同款面板 |
+| `stock_snipe.mjs` | 股票底池狙击：监控 four.meme 工厂合约新币，底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 的立刻 BNB→股票币→曲线买入 |
 | `routes.mjs` | 平台识别 + 曲线直调（AgentPad/Gang/MOAT/Flap Agent/UNITS）买卖适配 |
 
 ---
@@ -87,6 +88,31 @@ four_watch.mjs  (独立后台进程)
 **直调交易的记录**：直调交易不经过 baw 的订单簿，面板在浏览器 localStorage 里另存一份，和 baw 订单合并显示在历史记录里，带平台标签和 Tx 链接。
 
 新增平台：在 `routes.mjs` 的 `PLATFORMS` 加合约地址，在 `detect()` 加识别规则，在 `quote()` / `trade()` 加对应的报价和买卖调用即可（见下方 DIY 指南 B）。
+
+## 股票底池狙击（stock_snipe.mjs）
+
+监控 four.meme 的 OpenFourCore 工厂合约，不限模板。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一就立刻买入：
+
+| 股票代币 | 合约 |
+|---|---|
+| BNC4 | `0x7c8d5502b544ddaf8852fc46d1174e34876d545c` |
+| NVDAB | `0x02fca66c1d1afb4e2a7884261eb00f63598a7436` |
+| BNCB | `0x4902c5ebc598265ed2212b559b042de8a5eeec3f` |
+| SPCXB | `0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1` |
+| SKHYB | `0xca750ef65f295bbecd685abf54e82caf297bdb61` |
+
+买入路径：先只读报价，确认曲线能买；然后用 baw 聚合把 BNB 换成对应股票代币，按实际到账数量单独授权给工厂合约，最后调 `buyByBudget` 在内盘买入。买满设定个数后停止。
+
+```bash
+# 先模拟（只报价不下单）
+NODE_USE_ENV_PROXY=1 SNIPE_BUDGET_BNB=0.02 SNIPE_MAX=10 node stock_snipe.mjs
+# 实盘
+NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_BUDGET_BNB=0.02 SNIPE_MAX=10 node stock_snipe.mjs
+# 回放历史区块，检查识别和报价
+NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock>
+```
+
+一笔要依次过 换币 → 授权 → 买入 三笔交易，从发现到买入成交大约十几秒，比纯 BNB 底池慢。
 
 ## 依赖与前置
 
