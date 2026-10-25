@@ -175,6 +175,20 @@ async function loadGangProgress() {
   } catch { box.innerHTML = '<div class="empty">加载失败</div>'; }
 }
 
+// ---------- theme ----------
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  const b = $('themeBtn'); if (b) { b.textContent = t === 'dark' ? '☀️' : '🌙'; b.setAttribute('aria-label', t === 'dark' ? '切换到浅色模式' : '切换到暗夜模式'); b.title = b.getAttribute('aria-label'); }
+}
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('agentdesk.theme', t); } catch {}
+  applyTheme(t);
+}
+window.toggleTheme = toggleTheme;
+// follow the system setting until the user picks one explicitly
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { if (!localStorage.getItem('agentdesk.theme')) applyTheme(e.matches ? 'dark' : 'light'); }); } catch {}
+
 // ---------- wallet ----------
 async function loadWallet() {
   const extra = Object.values(state.tokens).map(t => t.address);
@@ -579,6 +593,7 @@ async function preflight() {
 
 // ---------- boot ----------
 function bootstrap() {
+  applyTheme(document.documentElement.dataset.theme || 'light');
   drawBlockies('0x0000000000000000000000000000000000000000');
   renderTokButtons(); renderPairs();
   $('fromAmt').addEventListener('input', () => { state.allSelected = false; scheduleQuote(); });

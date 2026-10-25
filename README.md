@@ -4,7 +4,7 @@
 
 > **安全模型（最重要）**：面板**不持有私钥**。所有签名、授权、风控、广播都委托本机已登录的 **Binance Agentic Wallet CLI（`baw`）**。本项目只做只读查询和"发起交易请求"，密钥永远在钱包进程里。
 
-![register](https://img.shields.io/badge/style-ivory%2Bgold-e0b24a) ![chain](https://img.shields.io/badge/chain-BSC%2056-f3ba2f) ![no--keys](https://img.shields.io/badge/keys-never%20stored-2e7d5e)
+![register](https://img.shields.io/badge/style-ivory%2Bgold-e0b24a) ![chain](https://img.shields.io/badge/chain-BSC%2056-f3ba2f) ![no--keys](https://img.shields.io/badge/keys-never%20stored-2e7d5e) [![stars](https://img.shields.io/github/stars/gunksd/agenticwallet-desk?style=flat&color=e0b24a)](https://github.com/gunksd/agenticwallet-desk/stargazers)
 
 ---
 
@@ -22,6 +22,7 @@
 
 ## 功能
 
+- **暗夜模式**：右上角按钮一键切换，默认跟随系统设置，选择会记住；深色是暖石墨底配同款香槟金。
 - **充值二维码**：钱包余额卡里显示收款地址二维码和复制按钮，二维码由本地内置的 `qrcode.js`（qrcode-generator 1.4.4，MIT）生成，不依赖外部服务。
 - **gang.fun 毕业进度榜**：监控页显示 gang.fun 上最接近毕业的内盘币（进度、距毕业约多少 U、24h 成交量、持有人数），数据来自 gang.fun 公开接口，缓存 30 秒。
 - **U 计价显示**：支付和收到的数量后面都用括号标出约合多少 U（按实时 BNB/USDT 报价换算），最小到账和历史记录同样显示。
@@ -222,6 +223,25 @@ POST 都校验 Origin 和 Content-Type；token 参数用 `^0x[a-fA-F0-9]{40}$` �
 7. 桌面通知 best-effort，不阻塞主流程。
 
 ---
+
+## Star 历史
+
+<a href="https://star-history.com/#gunksd/agenticwallet-desk&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=gunksd/agenticwallet-desk&type=Date&theme=dark" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=gunksd/agenticwallet-desk&type=Date" width="600" />
+  </picture>
+</a>
+
+## 请我喝杯咖啡 ☕
+
+觉得有用的话，欢迎打赏一杯咖啡，BNB 或 USDT 都可以（**BSC / BEP-20 网络**，其他网络转入无法找回）：
+
+<p align="center">
+  <img src="docs/coffee-cat.svg" alt="请我喝咖啡：BSC 收款地址二维码" width="300" />
+</p>
+
+<p align="center"><code>0x138843062b5ca5a88a9b32680bd944e143183c6e</code></p>
 
 ## 免责声明
 
