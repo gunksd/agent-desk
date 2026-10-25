@@ -121,9 +121,13 @@ export async function detect(ca) {
     }
   }
 
-  // Gang Soft: curves(ca).creator != 0
+  // Gang Soft: curves(ca).creator != 0. gs[3] = graduated flag; once set the
+  // curve rejects buys with AlreadyGraduated() and liquidity lives on PancakeSwap.
   const gs = words(await tryCall(P.gang.pad, enc('curves(address)', ca)));
-  if (gs.length && BigInt('0x' + gs[0]) !== 0n) return {platform: 'gang', venue: 'direct', pad: P.gang.pad, graduated: gs[3] && BigInt('0x' + gs[3]) !== 0n};
+  if (gs.length && BigInt('0x' + gs[0]) !== 0n) {
+    const graduated = !!(gs[3] && BigInt('0x' + gs[3]) !== 0n);
+    return {platform: 'gang', venue: graduated ? 'baw' : 'direct', pad: P.gang.pad, graduated};
+  }
 
   // Gang V2: curves(ca) = (creator, quote, realQuote, sold, gradAmt, virtualQuote, graduated, ...).
   // WBNB-quoted curves are bought by wrapping BNB first; other ERC20 quotes stay unsupported.
@@ -137,9 +141,12 @@ export async function detect(ca) {
       curve: {realQuote: BigInt('0x' + gv[2]).toString(), sold: BigInt('0x' + gv[3]).toString(), gradAmt: BigInt('0x' + gv[4]).toString(), virtualQuote: BigInt('0x' + gv[5]).toString()}};
   }
 
-  // MOAT curve
+  // MOAT curve (same curves() ABI as Gang: [3] = graduated)
   const mc = words(await tryCall(P.moat.pad, enc('curves(address)', ca)));
-  if (mc.length && BigInt('0x' + mc[0]) !== 0n) return {platform: 'moat', venue: 'direct', pad: P.moat.pad};
+  if (mc.length && BigInt('0x' + mc[0]) !== 0n) {
+    const graduated = !!(mc[3] && BigInt('0x' + mc[3]) !== 0n);
+    return {platform: 'moat', venue: graduated ? 'baw' : 'direct', pad: P.moat.pad, graduated};
+  }
 
   // AgentPad: any factory isToken(ca)
   for (const f of P.agentpad.factories) {
