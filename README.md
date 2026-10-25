@@ -116,7 +116,20 @@ NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_FORWARD_TO=0x你的地址 node stock_snip
 NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock> [presetId]
 ```
 
-可调参数：`SNIPE_MAX`（默认 6）、`SNIPE_TARGET`（默认 10000000）、`SNIPE_POLL_MS`（默认 500）、`SNIPE_SLIPPAGE`（默认 10）。
+可调参数：`SNIPE_BAW`（用哪个 baw，默认 `baw`）、`SNIPE_STATE`（状态文件）、`SNIPE_MAX`（默认 6）、`SNIPE_TARGET`（默认 10000000）、`SNIPE_POLL_MS`（默认 500）、`SNIPE_SLIPPAGE`（默认 10）。
+
+### 用第二个钱包跑狙击（和面板的钱包分开）
+
+baw 支持用 `BINANCE_BAW_DIR` 指定独立的登录目录。复制一份 baw，去掉它的系统钥匙串模块，让它把登录信息只存在自己的目录里，两个钱包就能同时登录、互不影响：
+
+```bash
+PKG=$(dirname $(dirname $(readlink -f $(which baw))))
+mkdir -p ~/.baw2-cli/bin ~/.baw2 && cp -R "$PKG" ~/.baw2-cli/pkg && rm -rf ~/.baw2-cli/pkg/node_modules/@github/keytar
+printf '#!/bin/bash\nexport BINANCE_BAW_DIR="$HOME/.baw2"\nexec node "$HOME/.baw2-cli/pkg/dist/index.js" "$@"\n' > ~/.baw2-cli/bin/baw && chmod +x ~/.baw2-cli/bin/baw
+~/.baw2-cli/bin/baw auth signin          # 用第二个钱包扫码
+SNIPE_BAW=~/.baw2-cli/bin/baw SNIPE_STATE=~/.config/stock-snipe-state-w2.json NODE_USE_ENV_PROXY=1 node stock_snipe.mjs
+```
+
 
 ## 依赖与前置
 
