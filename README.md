@@ -237,7 +237,7 @@ POST 都校验 Origin 和 Content-Type；token 参数用 `^0x[a-fA-F0-9]{40}$` �
 
 ## 请我喝杯咖啡 ☕
 
-觉得有用的话，欢迎打赏一杯咖啡，BNB 或 USDT 都可以（**BSC / BEP-20 网络**，其他网络转入无法找回）：
+觉得有用的话，欢迎打赏一杯咖啡，BNB 或 USDT 都可以（**evm 网络**）：
 
 <p align="center">
   <img src="docs/coffee-cat.svg" alt="请我喝咖啡：BSC 收款地址二维码" width="300" />
