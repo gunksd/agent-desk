@@ -83,7 +83,7 @@ four_watch.mjs  (独立后台进程)
 | Gang Pair / Gang V2 | V2 pad `curves(ca)` | 暂不支持自动交易 | 以 ERC20（bStocks / GANG / WBNB）计价，需先换出报价代币并授权 |
 | MOAT 占席（fair slot） | moat.fun board `mode=fair` | 暂未接入 | `fillSlot` 按席位定额付款，窗口期不可卖 |
 
-**曲线直调的安全模型**：`routes.mjs` 只负责拼 calldata。每笔交易都先 `baw contract-call preview`（钱包后端模拟），通过后才 `execute`。卖出前的授权是单独一笔 `approve`，额度精确等于本次卖出数量，不做无限授权。滑点保护：买卖都按报价算 `minOut`，`auto` 滑点在曲线路由上默认 10%。
+**曲线直调的安全模型**：`routes.mjs` 只负责拼 calldata。每笔交易都先 `baw contract-call preview`（钱包后端模拟），通过后才 `execute`。直调平台买入成交后，面板会在后台自动发一笔 `approve`，额度精确等于买到后的持仓（不做无限授权），这样卖出时只需一笔交易；如果卖出时额度不够（比如之后又加仓），会先补授权再卖。滑点保护：买卖都按报价算 `minOut`，`auto` 滑点在曲线路由上默认 10%。
 
 **直调交易的记录**：直调交易不经过 baw 的订单簿，面板在浏览器 localStorage 里另存一份，和 baw 订单合并显示在历史记录里，带平台标签和 Tx 链接。
 

@@ -323,6 +323,30 @@ async function ensureAllowance(token, spender, amount) {
   return ap;
 }
 
+// Which token/spender a later sell needs approved. null = sell needs no approval
+// (AgentPad sells on the token itself, Cycpad and Flap Agent don't pull tokens).
+function sellApproval(r, ca) {
+  if (r.platform === 'fouragent') return {token: ca, spender: r.core};
+  if (r.platform === 'gang' || r.platform === 'moat' || r.platform === 'gangv2') return {token: ca, spender: r.pad};
+  if (r.platform === 'units') return {token: r.token, spender: r.curve};
+  return null;
+}
+
+// Run right after a buy: wait for the bought tokens to land, then approve exactly
+// the current holding to the sell spender, so the next sell is a single tx.
+export async function preapprove(ca) {
+  const r = await detect(ca);
+  if (r.venue !== 'direct') return {ok: true, skipped: 'aggregator route approves at sell time'};
+  const a = sellApproval(r, ca);
+  if (!a) return {ok: true, skipped: 'this platform sells without an approval'};
+  const me = await wallet();
+  let bal = 0n;
+  await waitFor(async () => (bal = await balanceOf(a.token, me)) > 0n, 90000);
+  if (bal === 0n) return {ok: false, error: '90 秒内没看到买入到账，未授权'};
+  const ap = await ensureAllowance(a.token, a.spender, bal);
+  return {ok: !!ap.ok, skipped: ap.skipped || false, amount: bal.toString(), spender: a.spender, error: ap.error};
+}
+
 export async function trade(ca, side, amount, slippagePct = 10) {
   const q = await quote(ca, side, amount);
   if (q.venue === 'baw') return {ok: false, venue: 'baw', route: q.route, error: 'use baw market-order for this token'};
@@ -380,6 +404,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (cmd === 'detect') return out({success: true, data: await detect(ca)});
     if (cmd === 'quote') return out({success: true, data: await quote(ca, side, amount)});
     if (cmd === 'curveinfo') return out({success: true, data: await curveInfo(ca)});
+    if (cmd === 'preapprove') { const r = await preapprove(ca); return out({success: !!r.ok, data: r, error: r.ok ? undefined : {message: r.error}}); }
     if (cmd === 'trade') { const r = await trade(ca, side, amount, slip); return out({success: !!r.ok, data: r, error: r.ok ? undefined : {message: r.error || ('失败于 ' + r.stage)}}); }
     throw new Error('usage: detect|quote|trade <ca> ...');
   })().catch(e => out({success: false, error: {message: e.message}}));

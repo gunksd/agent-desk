@@ -201,6 +201,16 @@ def _float_safe_qty(qty):
     return format(q.normalize(), 'f')
 
 
+def _bg_preapprove(token):
+    """Fire-and-forget: approve the post-buy holding to the platform's sell spender."""
+    try:
+        log = open('/tmp/preapprove.log', 'a')
+        subprocess.Popen(['node', str(Path(__file__).with_name('routes.mjs')), 'preapprove', token],
+                         stdout=log, stderr=log, env=_env(), start_new_session=True)
+    except OSError:
+        pass
+
+
 def run_node(script, *args, timeout=35):
     p = subprocess.run(["node", str(Path(__file__).with_name(script)), *args],
                        capture_output=True, text=True, timeout=timeout, env=_env())
@@ -376,6 +386,9 @@ class Handler(BaseHTTPRequestHandler):
                             'toCoinSymbol': sym_out, 'toCoinAmount': x.get('outHuman', '0'),
                             'slippage': float(slip) / 100, 'route': x.get('route'), 'note': x.get('note', ''), 'venue': 'direct'}})
                     t = run_node('routes.mjs', 'trade', curve_token, side, amt, slip, timeout=150)
+                    if t.get('success') and side == 'buy':
+                        # Approve the new holding for selling now, so the sell later is one tx.
+                        _bg_preapprove(curve_token)
                     if t.get('success'):
                         res = t['data'].get('result') or {}
                         t['data']['txHash'] = res.get('txHash') if isinstance(res, dict) else None
