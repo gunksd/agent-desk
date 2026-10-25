@@ -2,6 +2,8 @@
 
 一个**本地运行**的 BNB Chain（chainId 56）交易面板：聚合兑换 + 代币信息展示 + Four.meme 新币自动抢购监控。精致白 / 香槟金商业风格，三视图（兑换 · 抢购监控 · 记录）。
 
+> 📖 完整使用说明见 **[Wiki](https://github.com/gunksd/agenticwallet-desk/wiki)**：快速开始、支持的平台、安全模型、接口参考、常见问题。
+
 > **安全模型（最重要）**：面板**不持有私钥**。所有签名、授权、风控、广播都委托本机已登录的 **Binance Agentic Wallet CLI（`baw`）**。本项目只做只读查询和"发起交易请求"，密钥永远在钱包进程里。
 
 ![register](https://img.shields.io/badge/style-ivory%2Bgold-e0b24a) ![chain](https://img.shields.io/badge/chain-BSC%2056-f3ba2f) ![no--keys](https://img.shields.io/badge/keys-never%20stored-2e7d5e) [![stars](https://img.shields.io/github/stars/gunksd/agenticwallet-desk?style=flat&color=e0b24a)](https://github.com/gunksd/agenticwallet-desk/stargazers)
