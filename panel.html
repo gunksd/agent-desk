@@ -196,6 +196,8 @@ main{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:clamp(20
 .mon-title{font-size:19px;font-weight:750;letter-spacing:-.02em}
 .mon-sub{font-size:12px;color:var(--muted);margin-top:3px}
 .pill{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
+.snipe-ctl{margin:16px 0 4px}.snipe-ctl .cta{margin-top:0}.snipe-ctl .cta.stop{background:var(--surface-2);color:var(--down);border:1px solid oklch(85% .06 25);box-shadow:none}
+.snipe-ctl .cap{font-size:12px;color:var(--muted);margin-top:8px}
 .pill.on{background:oklch(94% .05 150);color:var(--up)}
 .pill.off{background:oklch(94% .06 25);color:var(--down)}
 .pill.arm{background:var(--gold-soft);color:var(--gold-deep);border:1px solid var(--gold-line)}
@@ -362,6 +364,10 @@ dialog::backdrop{background:oklch(40% .03 70/.3);backdrop-filter:blur(3px)}
             <div class="mon-sub" id="monSub">读取状态…</div>
           </div>
           <div style="margin-left:auto;display:flex;gap:7px" id="monPills"></div>
+        </div>
+        <div class="snipe-ctl" id="snipeCtl" hidden>
+          <button class="cta" id="snipeBtn" onclick="toggleSnipe()">启动狙击</button>
+          <div class="cap" id="snipeCap"></div>
         </div>
         <div class="statgrid" id="monStats"></div>
         <div class="hd" style="margin:20px 0 6px"><h2>最近命中</h2></div>

@@ -116,6 +116,8 @@ NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_FORWARD_TO=0x你的地址 node stock_snip
 NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock> [presetId]
 ```
 
+**在面板里启动 / 暂停**：「抢购监控」页面有「启动狙击 / 暂停狙击」按钮。启动参数（用哪个 baw、实盘还是模拟、买入数量、转出地址等）读自 `~/.config/stock-snipe-launch.json`，字段名同上面的环境变量。启动前会先检查狙击钱包是否已登录，没登录会直接提示，不会启动。
+
 可调参数：`SNIPE_BAW`（用哪个 baw，默认 `baw`）、`SNIPE_STATE`（状态文件）、`SNIPE_MAX`（默认 6）、`SNIPE_TARGET`（默认 10000000）、`SNIPE_POLL_MS`（默认 500）、`SNIPE_SLIPPAGE`（默认 10）。
 
 ### 用第二个钱包跑狙击（和面板的钱包分开）
