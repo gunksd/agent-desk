@@ -131,10 +131,49 @@ function recordDirect(t) {
 function showView(v) {
   for (const el of document.querySelectorAll('.view')) el.hidden = el.id !== 'view-' + v;
   for (const b of document.querySelectorAll('.nav-item')) b.classList.toggle('active', b.dataset.view === v);
-  if (v === 'monitor') { loadStatus(); loadAlerts(); }
+  if (v === 'monitor') { loadGangProgress(); loadStatus(); loadAlerts(); }
   if (v === 'activity') { loadHistory(); loadAlerts(); }
 }
 window.showView = showView;
+
+// token names/symbols are untrusted on-chain strings
+const esc = v => String(v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+
+// ---------- deposit QR ----------
+// qrcode.js is qrcode-generator@1.4.4 (MIT), served locally; QR content is the raw address.
+function renderFund(a) {
+  if (!a || !/^0x[0-9a-fA-F]{40}$/.test(a)) { $('walletAddr').textContent = '地址读取失败'; return; }
+  $('walletAddr').textContent = a;
+  const box = $('fundQr');
+  if (box && box.dataset.addr !== a && typeof qrcode === 'function') {
+    const qr = qrcode(0, 'M'); qr.addData(a); qr.make();
+    box.innerHTML = qr.createSvgTag({cellSize: 5, margin: 2, scalable: true});
+    box.dataset.addr = a;
+  }
+}
+function copyFundAddr(btn) { copyText(state.wallet || $('walletAddr').textContent.trim(), btn); }
+window.copyFundAddr = copyFundAddr;
+
+// ---------- gang.fun graduation progress ----------
+async function loadGangProgress() {
+  const box = $('gpList'); if (!box) return;
+  try {
+    const x = await (await fetch('/gang-progress')).json();
+    if (!x.success) { box.innerHTML = '<div class="empty">' + esc(x.error?.message || '加载失败') + '</div>'; return; }
+    const tks = x.data?.tokens || [];
+    if (!tks.length) { box.innerHTML = '<div class="empty">暂无进度 ≥1% 的币</div>'; $('gpAge').textContent = ''; return; }
+    const usd = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', {maximumFractionDigits: 0});
+    box.innerHTML = tks.map(t => {
+      const pct = Math.min(+t.progressPct || 0, 100);
+      return `<div class="gp-item" title="${esc(t.name || '')} · ${esc(t.address || '')}">
+        <div class="gp-line"><span class="gp-sym">${esc(t.symbol || '?')}</span><span class="gp-pct">${pct.toFixed(1)}%</span></div>
+        <div class="gp-bar" role="progressbar" aria-valuenow="${pct.toFixed(1)}" aria-valuemin="0" aria-valuemax="100"><div class="gp-fill" style="width:${pct}%"></div></div>
+        <div class="gp-meta">距毕业约 ${usd(t.remainingUsd)} · 24h 量 ${usd(t.volume24hUsd)} · ${t.holders ?? '—'} 人持有</div>
+      </div>`;
+    }).join('');
+    if (x.data?.age) $('gpAge').textContent = '更新于 ' + new Date(x.data.age * 1000).toLocaleTimeString();
+  } catch { box.innerHTML = '<div class="empty">加载失败</div>'; }
+}
 
 // ---------- wallet ----------
 async function loadWallet() {
@@ -161,7 +200,7 @@ async function ensureMeta(addrs, force) {
       state.balances[k] = v.balance;
       KNOWN[k] = KNOWN[k] || state.tokens[k];
     }
-    $('walletAddr').textContent = state.wallet;
+    renderFund(state.wallet);
     drawBlockies(state.wallet);
     renderTokButtons();
   } catch (e) { $('walletAddr').textContent = '余额读取失败：' + e.message; }
@@ -552,6 +591,7 @@ function bootstrap() {
   loadWallet(); loadHistory(); loadStatus(); loadAlerts(); loadBnbPrice();
   setInterval(loadBnbPrice, 30000);
   setInterval(loadStatus, 6000);
+  setInterval(() => { if (!$('view-monitor')?.hidden) loadGangProgress(); }, 20000);
   setInterval(loadAlerts, 8000);
 }
 window.bootstrap = bootstrap;

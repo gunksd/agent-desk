@@ -22,6 +22,8 @@
 
 ## 功能
 
+- **充值二维码**：钱包余额卡里显示收款地址二维码和复制按钮，二维码由本地内置的 `qrcode.js`（qrcode-generator 1.4.4，MIT）生成，不依赖外部服务。
+- **gang.fun 毕业进度榜**：监控页显示 gang.fun 上最接近毕业的内盘币（进度、距毕业约多少 U、24h 成交量、持有人数），数据来自 gang.fun 公开接口，缓存 30 秒。
 - **U 计价显示**：支付和收到的数量后面都用括号标出约合多少 U（按实时 BNB/USDT 报价换算），最小到账和历史记录同样显示。
 - **聚合兑换**：任意代币互换、USDT⇄BNB 快捷对、方向反转、滑点（自动/0.5/1/3/自定义）与 Gas（低/中/高）、防抖自动报价、价格影响、**25%/50%/75%/最大** 比例快捷填入、订单历史轮询到成交。
 - **代币信息展示**：代币选择器里粘贴合约地址即展示该币 **logo / 名称 / 价格 / 市值 / 流动性 / 持有人 / 买卖税 / 貔貅·rug 风险徽章**（数据来自 GMGN），而不是裸"导入"。
@@ -131,6 +133,7 @@ NODE_USE_ENV_PROXY=1 FOUR_ARM=1 FOUR_BUDGET_BNB=0.01 node four_watch.mjs
 | GET | `/meta?tokens=a,b` | 钱包余额 + 代币链上元数据 |
 | GET | `/tokeninfo?token=` | GMGN 行情/logo/税/风险 |
 | GET | `/orders` · `/order?id=` | 订单历史 / 单条 |
+| GET | `/gang-progress` | gang.fun 内盘毕业进度（缓存 30 秒） |
 | GET | `/route?token=` | 识别代币所属平台和路由 |
 | GET | `/status` | 监控状态（面板仪表盘读） |
 | GET | `/events` | 买入/10倍事件 |

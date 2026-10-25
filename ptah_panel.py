@@ -233,6 +233,41 @@ def valid_token(t):
     return bool(ADDR.fullmatch(t))
 
 
+_GP_CACHE = {'ts': 0.0, 'data': None}
+
+
+def gang_progress(min_pct=1.0, limit=10):
+    """Live gang.fun bonding-curve progress from the public gang.fun API, cached 30s."""
+    import time
+    now = time.time()
+    if _GP_CACHE['data'] is not None and now - _GP_CACHE['ts'] < 30:
+        return {'success': True, 'data': {'tokens': _GP_CACHE['data'], 'age': _GP_CACHE['ts']}}
+    try:
+        p = subprocess.run(['curl', '-s', '--max-time', '15', 'https://gang.fun/api/tokens?limit=200'],
+                           capture_output=True, text=True, timeout=20, env=_env())
+        d = json.loads(p.stdout)
+        items = d.get('items') if isinstance(d, dict) else d
+    except Exception as e:
+        if _GP_CACHE['data'] is not None:
+            return {'success': True, 'data': {'tokens': _GP_CACHE['data'], 'age': _GP_CACHE['ts']}}
+        return {'success': False, 'error': {'message': f'gang.fun 读取失败: {e}'}}
+    out = []
+    for t in items or []:
+        pct = float(t.get('progressPct') or 0)
+        if t.get('graduated') or pct < min_pct:
+            continue
+        raised = float(t.get('raisedBnb') or 0)
+        bnb_usd = float(t.get('bnbUsd') or 0)
+        # target = raised / progress, so what's left in USD = target - raised
+        remaining = (raised / (pct / 100) - raised) * bnb_usd if pct > 0 and raised > 0 and bnb_usd else None
+        out.append({'symbol': t.get('symbol'), 'name': t.get('name'), 'address': t.get('address'),
+                    'progressPct': pct, 'remainingUsd': remaining, 'volume24hUsd': t.get('volume24hUsd'),
+                    'holders': t.get('holders')})
+    out.sort(key=lambda x: -x['progressPct'])
+    _GP_CACHE.update(ts=now, data=out[:limit])
+    return {'success': True, 'data': {'tokens': _GP_CACHE['data'], 'age': now}}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -294,13 +329,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 data = []
             return self.send({'success': True, 'data': data})
+        if path == '/gang-progress':
+            return self.send(gang_progress())
         if path == '/tokeninfo':
             token = query.get('token', [''])[0]
             if not valid_token(token):
                 return self.send({'success': False, 'error': {'message': 'Invalid token address'}}, 400)
             return self.send(token_info(token))
-        if path == '/panel.js':
-            b = Path(__file__).with_name('panel.js').read_bytes()
+        if path in ('/panel.js', '/qrcode.js'):
+            b = Path(__file__).with_name(path.lstrip('/')).read_bytes()
             self.send_response(200)
             self.send_header('content-type', 'text/javascript; charset=utf-8')
             self.send_header('content-length', str(len(b)))
