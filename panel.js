@@ -180,7 +180,7 @@ async function loadGangProgress() {
 function fmtPrice(p) {
   if (!isFinite(p)) return '—';
   if (Math.abs(p) < 1e-15) return '$0';           // axis ticks at ~0 come back as float noise
-  if (p < 0) return '-' + fmtPrice(-p);
+  if (p < 0) return '';                            // no negative prices: hide those axis ticks
   if (p >= 1) return '$' + p.toLocaleString('en-US', {maximumFractionDigits: 4});
   if (p >= 0.0001) return '$' + p.toPrecision(4).replace(/\.?0+$/, '');
   const [m, e] = p.toExponential(3).split('e');   // m = "4.029", e = "-5"
@@ -216,13 +216,14 @@ function ensureChart() {
     localization: {priceFormatter: fmtPrice}});
   const up = rgb('--up'), down = rgb('--down');
   chartState.candle = ch.addCandlestickSeries({upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
-    priceFormat: {type: 'custom', minMove: 1e-14, formatter: fmtPrice}});
+    priceFormat: {type: 'custom', minMove: 1e-14, formatter: fmtPrice},
+    autoscaleInfoProvider: orig => { const r = orig(); if (r?.priceRange) r.priceRange.minValue = Math.max(0, r.priceRange.minValue); return r; }});
   chartState.vol = ch.addHistogramSeries({priceScaleId: 'vol', priceFormat: {type: 'volume'}, lastValueVisible: false, priceLineVisible: false});
-  ch.priceScale('vol').applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
-  chartState.candle.priceScale().applyOptions({scaleMargins: {top: 0.08, bottom: 0.22}});
+  ch.priceScale('vol').applyOptions({scaleMargins: {top: 0.84, bottom: 0}, visible: false});
+  chartState.candle.priceScale().applyOptions({scaleMargins: {top: 0.08, bottom: 0.2}});
   chartState.chart = ch;
   // keep all candles in view when the layout width changes (window resize, view switch)
-  let rw = 0; new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w && w !== rw) { rw = w; ch.timeScale().fitContent(); } }).observe(el);
+  let rw = 0; new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w && w !== rw) { rw = w; const n = chartState.lastData?.length || 0; if (n * 18 >= w * 0.8) ch.timeScale().fitContent(); } }).observe(el);
   return ch;
 }
 function restyleChart() {
@@ -254,19 +255,33 @@ async function loadChart(force) {
   try {
     const x = await (await fetch(`/kline?token=${encodeURIComponent(token)}&res=${chartState.res}`)).json();
     if (seq !== chartState.seq) return;
-    if (!x.success) { if (!chartState.lastData) msg.textContent = x.error?.message || 'K 线加载失败'; return; }
+    if (!x.success) {
+      if (!chartState.lastData) msg.textContent = x.error?.retry ? 'GMGN 繁忙，几秒后自动重试…' : (x.error?.message || 'K 线加载失败');
+      // rate-limited: try again shortly instead of waiting for the 30 s refresh
+      if (x.error?.retry) { clearTimeout(chartState.retry); chartState.retry = setTimeout(() => loadChart(), 6000); }
+      return;
+    }
     const cs = x.data.candles || [];
     if (!cs.length) { msg.textContent = '这个币在 GMGN 还没有 K 线数据（新币通常要等第一笔外盘或内盘成交被收录）'; chartState.candle.setData([]); chartState.vol.setData([]); return; }
     msg.textContent = '';
     const fresh = !chartState.lastData;
     drawCandles(cs);
-    if (fresh || force) ch.timeScale().fitContent();
+    if (fresh || force) {
+      // few candles (young token / daily view): don't stretch them across the whole width
+      const w = $('chart').clientWidth || 600, maxBar = 18;
+      if (cs.length * maxBar < w * 0.8) {
+        const span = w / maxBar, pad = (span - cs.length) / 2;
+        ch.timeScale().setVisibleLogicalRange({from: -pad, to: cs.length - 1 + pad});
+      } else ch.timeScale().fitContent();
+    }
   } catch { if (seq === chartState.seq && !chartState.lastData) msg.textContent = 'K 线加载失败'; }
 }
 function setRes(r) {
   chartState.res = r; try { localStorage.setItem('agentdesk.res', r); } catch {}
   for (const b of $('resSeg').children) { const on = b.dataset.res === r; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
-  chartState.lastData = null; loadChart(true);
+  chartState.lastData = null;
+  // clicking through periods quickly only fetches the one you stop on
+  clearTimeout(chartState.debounce); chartState.debounce = setTimeout(() => loadChart(true), 350);
 }
 function initChartUI() {
   for (const b of $('resSeg').children) b.addEventListener('click', () => setRes(b.dataset.res));

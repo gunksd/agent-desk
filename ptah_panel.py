@@ -54,29 +54,47 @@ def _gmgn_key():
     return os.environ.get('GMGN_API_KEY', '')
 
 
-# GMGN bans the IP after repeated 429s, so every GMGN call shares one backoff.
-GMGN_BACKOFF = {'until': 0.0}
+# GMGN rate-limits hard (several calls in the same second get 429, repeats get
+# the IP banned for a while). All GMGN calls go through one lock, spaced at least
+# GMGN_GAP seconds apart; a 429 pauses every GMGN call for GMGN_PAUSE seconds.
+import threading
+GMGN_LOCK = threading.Lock()
+GMGN_GAP = 1.2
+GMGN_PAUSE = 20
+GMGN_BACKOFF = {'until': 0.0, 'last': 0.0}
+
+
+def _gmgn_run(argv, env, timeout=25):
+    """Run gmgn-cli serialized and spaced; returns CompletedProcess or None."""
+    import time
+    with GMGN_LOCK:
+        now = time.time()
+        if now < GMGN_BACKOFF['until']:
+            return None
+        wait = GMGN_BACKOFF['last'] + GMGN_GAP - now
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            p = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, env=env)
+        except (subprocess.TimeoutExpired, OSError):
+            p = None
+        GMGN_BACKOFF['last'] = time.time()
+        return p
 
 
 def _gmgn_limited(stderr):
     import time
     if '429' in (stderr or '') or 'RATE_LIMIT' in (stderr or ''):
-        GMGN_BACKOFF['until'] = time.time() + 60
+        GMGN_BACKOFF['until'] = time.time() + GMGN_PAUSE
         return True
     return False
 
 
 def _gmgn(args, key):
     """Run one gmgn-cli call and return its parsed `data` dict, or None."""
-    import time
-    if time.time() < GMGN_BACKOFF['until']:
-        return None
     env = dict(os.environ, NODE_USE_ENV_PROXY='1', GMGN_API_KEY=key)
-    try:
-        p = subprocess.run(['gmgn-cli', *args, '--raw'], text=True, capture_output=True, timeout=25, env=env)
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    if _gmgn_limited(p.stderr):
+    p = _gmgn_run(['gmgn-cli', *args, '--raw'], env)
+    if p is None or _gmgn_limited(p.stderr):
         return None
     txt = p.stdout.strip()
     try:
@@ -276,22 +294,26 @@ def gmgn_kline(token, resolution):
     if now < GMGN_BACKOFF['until']:
         if hit:
             return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'stale': True, 'ts': hit['ts']}}
-        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试'}}
+        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试', 'retry': True}}
     gk = _gmgn_key()
     if not gk:
         return {'success': False, 'error': {'message': '未配置 GMGN API key，无法显示 K 线'}}
     end = int(now)
     env = dict(os.environ, NODE_USE_ENV_PROXY='1', GMGN_API_KEY=gk)
-    try:
-        p = subprocess.run(['gmgn-cli', 'market', 'kline', '--chain', 'bsc', '--address', token,
-                            '--resolution', resolution, '--from', str(end - KLINE_WINDOWS[resolution]),
-                            '--to', str(end), '--raw'], text=True, capture_output=True, timeout=25, env=env)
-    except (subprocess.TimeoutExpired, OSError):
-        return {'success': False, 'error': {'message': 'GMGN K 线请求超时'}}
+    argv = ['gmgn-cli', 'market', 'kline', '--chain', 'bsc', '--address', token, '--resolution', resolution,
+            '--from', str(end - KLINE_WINDOWS[resolution]), '--to', str(end), '--raw']
+    p = _gmgn_run(argv, env)
+    if p is not None and '429' in (p.stderr or '') and 'BANNED' not in (p.stderr or ''):
+        time.sleep(2.5)                      # a plain 429 clears in a couple of seconds
+        p = _gmgn_run(argv, env)
+    if p is None:
+        if hit:
+            return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'stale': True, 'ts': hit['ts']}}
+        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试', 'retry': True}}
     if _gmgn_limited(p.stderr):
         if hit:
             return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'stale': True, 'ts': hit['ts']}}
-        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试'}}
+        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试', 'retry': True}}
     try:
         d = json.loads(p.stdout)
         rows = (d.get('data') or d).get('list') or []
