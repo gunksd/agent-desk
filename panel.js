@@ -99,7 +99,7 @@ function renderPairs() {
     $('pairs').appendChild(b);
   }
 }
-function afterPairChange() { renderTokButtons(); ensureMeta([state.from, state.to]); scheduleQuote(); refreshTokenCard(); refreshRoute(); }
+function afterPairChange() { renderTokButtons(); ensureMeta([state.from, state.to]); scheduleQuote(); refreshTokenCard(); refreshRoute(); loadChart(); }
 
 // Detect which launchpad a non-base token belongs to and badge it.
 let routeSeq = 0;
@@ -175,9 +175,110 @@ async function loadGangProgress() {
   } catch { box.innerHTML = '<div class="empty">加载失败</div>'; }
 }
 
+// Chart prices: memecoins trade at 1e-8 and below, so avoid exponent notation.
+// Small values use a subscript zero count, e.g. 0.0₅4029 = 0.0000040299.
+function fmtPrice(p) {
+  if (!isFinite(p)) return '—';
+  if (Math.abs(p) < 1e-15) return '$0';           // axis ticks at ~0 come back as float noise
+  if (p < 0) return '-' + fmtPrice(-p);
+  if (p >= 1) return '$' + p.toLocaleString('en-US', {maximumFractionDigits: 4});
+  if (p >= 0.0001) return '$' + p.toPrecision(4).replace(/\.?0+$/, '');
+  const [m, e] = p.toExponential(3).split('e');   // m = "4.029", e = "-5"
+  const z = -Number(e) - 1;                         // zeros after the decimal point
+  const sub = String(z).split('').map(d => '₀₁₂₃₄₅₆₇₈₉'[d]).join('');
+  return '$0.0' + sub + m.replace('.', '').replace(/0+$/, '');
+}
+const chartState = {res: localStorage.getItem('agentdesk.res') || '15m', chart: null, candle: null, vol: null, token: null, seq: 0, timer: null};
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Lightweight Charts wants concrete colours; resolve the theme's oklch() vars via a probe element.
+const _cc = document.createElement('canvas').getContext('2d', {willReadFrequently: true});
+// Browsers may report oklch() from getComputedStyle; painting one pixel turns any
+// CSS colour into plain sRGB bytes, which is what the chart library parses.
+function rgb(varName, alpha = 1) {
+  const p = document.createElement('i'); p.style.color = `var(${varName})`; document.body.appendChild(p);
+  const c = getComputedStyle(p).color; p.remove();
+  _cc.clearRect(0, 0, 1, 1); _cc.fillStyle = '#000'; _cc.fillStyle = c; _cc.fillRect(0, 0, 1, 1);
+  const [r, g, b] = _cc.getImageData(0, 0, 1, 1).data;
+  return alpha === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+function chartTheme() {
+  return {
+    layout: {background: {type: 'solid', color: 'transparent'}, textColor: rgb('--muted'), fontFamily: getComputedStyle(document.body).fontFamily, attributionLogo: true},
+    grid: {vertLines: {color: rgb('--line-2')}, horzLines: {color: rgb('--line-2')}},
+    rightPriceScale: {borderColor: rgb('--line')}, timeScale: {borderColor: rgb('--line'), timeVisible: true, secondsVisible: false},
+    crosshair: {mode: 1, vertLine: {color: rgb('--gold-line'), labelBackgroundColor: rgb('--gold-deep')}, horzLine: {color: rgb('--gold-line'), labelBackgroundColor: rgb('--gold-deep')}},
+  };
+}
+function ensureChart() {
+  if (chartState.chart || typeof LightweightCharts === 'undefined') return chartState.chart;
+  const el = $('chart');
+  const ch = LightweightCharts.createChart(el, {...chartTheme(), autoSize: true,
+    localization: {priceFormatter: fmtPrice}});
+  const up = rgb('--up'), down = rgb('--down');
+  chartState.candle = ch.addCandlestickSeries({upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
+    priceFormat: {type: 'custom', minMove: 1e-14, formatter: fmtPrice}});
+  chartState.vol = ch.addHistogramSeries({priceScaleId: 'vol', priceFormat: {type: 'volume'}, lastValueVisible: false, priceLineVisible: false});
+  ch.priceScale('vol').applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
+  chartState.candle.priceScale().applyOptions({scaleMargins: {top: 0.08, bottom: 0.22}});
+  chartState.chart = ch;
+  // keep all candles in view when the layout width changes (window resize, view switch)
+  let rw = 0; new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w && w !== rw) { rw = w; ch.timeScale().fitContent(); } }).observe(el);
+  return ch;
+}
+function restyleChart() {
+  if (!chartState.chart) return;
+  chartState.chart.applyOptions(chartTheme());
+  const up = rgb('--up'), down = rgb('--down');
+  chartState.candle.applyOptions({upColor: up, downColor: down, wickUpColor: up, wickDownColor: down});
+  if (chartState.lastData) drawCandles(chartState.lastData);
+}
+function drawCandles(cs) {
+  chartState.lastData = cs;
+  const upA = rgb('--up', .35), downA = rgb('--down', .35);
+  chartState.candle.setData(cs.map(c => ({time: c.time, open: c.open, high: c.high, low: c.low, close: c.close})));
+  chartState.vol.setData(cs.map(c => ({time: c.time, value: c.volume, color: c.close >= c.open ? upA : downA})));
+  const last = cs[cs.length - 1], first = cs[0];
+  $('chPrice').textContent = fmtPrice(last.close);
+  const pct = first.open ? (last.close - first.open) / first.open * 100 : 0;
+  const el = $('chChg'); el.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%（区间）'; el.className = 'chg ' + (pct >= 0 ? 'up' : 'down');
+}
+async function loadChart(force) {
+  const token = activeCustomToken(), card = $('chartCard');
+  if (!token) { card.hidden = true; chartState.token = null; return; }
+  card.hidden = false;
+  if (token !== chartState.token) { $('chSym').textContent = sym(tokenInfo(token)); $('chPrice').textContent = '—'; $('chChg').textContent = ''; chartState.lastData = null; if (chartState.candle) { chartState.candle.setData([]); chartState.vol.setData([]); } }
+  chartState.token = token;
+  const ch = ensureChart(); if (!ch) { $('chartMsg').textContent = '图表组件加载失败'; return; }
+  const seq = ++chartState.seq, msg = $('chartMsg');
+  if (!chartState.lastData) msg.textContent = '加载 K 线…';
+  try {
+    const x = await (await fetch(`/kline?token=${encodeURIComponent(token)}&res=${chartState.res}`)).json();
+    if (seq !== chartState.seq) return;
+    if (!x.success) { if (!chartState.lastData) msg.textContent = x.error?.message || 'K 线加载失败'; return; }
+    const cs = x.data.candles || [];
+    if (!cs.length) { msg.textContent = '这个币在 GMGN 还没有 K 线数据（新币通常要等第一笔外盘或内盘成交被收录）'; chartState.candle.setData([]); chartState.vol.setData([]); return; }
+    msg.textContent = '';
+    const fresh = !chartState.lastData;
+    drawCandles(cs);
+    if (fresh || force) ch.timeScale().fitContent();
+  } catch { if (seq === chartState.seq && !chartState.lastData) msg.textContent = 'K 线加载失败'; }
+}
+function setRes(r) {
+  chartState.res = r; try { localStorage.setItem('agentdesk.res', r); } catch {}
+  for (const b of $('resSeg').children) { const on = b.dataset.res === r; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
+  chartState.lastData = null; loadChart(true);
+}
+function initChartUI() {
+  for (const b of $('resSeg').children) b.addEventListener('click', () => setRes(b.dataset.res));
+  setRes(chartState.res);
+  // light refresh while the swap view is visible; the server cache absorbs repeats
+  chartState.timer = setInterval(() => { if (!$('view-swap').hidden && !document.hidden && chartState.token) loadChart(); }, 30000);
+}
+
 // ---------- theme ----------
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
+  setTimeout(restyleChart, 0);
   const b = $('themeBtn'); if (b) { b.textContent = t === 'dark' ? '☀️' : '🌙'; b.setAttribute('aria-label', t === 'dark' ? '切换到浅色模式' : '切换到暗夜模式'); b.title = b.getAttribute('aria-label'); }
 }
 function toggleTheme() {
@@ -410,6 +511,7 @@ async function refreshTokenCard() {
     $('tiGrid').innerHTML = tokenInfoCells(d, token).map(([k, v]) => `<div class="c"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
     $('tiBadges').innerHTML = riskBadges(d).map(([t, c]) => `<span class="badge ${c}">${t}</span>`).join('');
     card.classList.add('show');
+    $('chIc').innerHTML = $('tiIc').innerHTML; $('chSym').textContent = d.symbol || '—';
   } catch { if (seq === tiSeq) card.classList.remove('show'); }
 }
 
@@ -593,6 +695,7 @@ async function preflight() {
 
 // ---------- boot ----------
 function bootstrap() {
+  initChartUI();
   applyTheme(document.documentElement.dataset.theme || 'light');
   drawBlockies('0x0000000000000000000000000000000000000000');
   renderTokButtons(); renderPairs();

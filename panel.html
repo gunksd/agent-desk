@@ -239,6 +239,37 @@ main{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:clamp(20
 .gp-bar{height:8px;background:var(--surface-2);border-radius:999px;overflow:hidden;box-shadow:0 0 0 1px var(--line-2);margin:7px 0 5px}
 .gp-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-deep));border-radius:999px;transition:width .6s ease}
 .gp-meta{font-size:10.5px;color:var(--muted)}
+.chart-card{margin:0 0 26px}
+.chart-top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 14px}
+.chart-id{display:flex;align-items:center;gap:12px;min-width:0}
+.chart-id .ic{width:38px;height:38px;border-radius:50%;flex:none;overflow:hidden;display:grid;place-items:center;background:var(--surface-2);box-shadow:0 0 0 1px var(--line)}
+.chart-id .ic img{width:100%;height:100%;object-fit:cover}
+.chart-name{font-weight:750;font-size:15px}
+.chart-pair{color:var(--faint);font-weight:600}
+.chart-src{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--gold-deep);background:var(--gold-soft);border-radius:6px;padding:2px 6px;margin-left:4px;vertical-align:2px}
+.chart-price{display:flex;align-items:baseline;gap:10px;margin-top:2px}
+.chart-price b{font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.chg{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.chg.up{color:var(--up)}.chg.down{color:var(--down)}
+.res-seg{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:12px;border:1px solid var(--line-2)}
+.res-seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:650;padding:6px 11px;border-radius:9px;cursor:pointer}
+.res-seg button:hover{color:var(--ink)}
+.res-seg button.on{background:var(--surface);color:var(--gold-deep);box-shadow:0 1px 3px oklch(0% 0 0/.12)}
+.res-seg button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.chart-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:stretch}
+.chart-wrap{position:relative;min-height:380px;border-radius:var(--r-s);overflow:hidden}
+#chart{position:absolute;inset:0}
+.chart-msg{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;pointer-events:none;text-align:center;padding:20px}
+.chart-msg:empty{display:none}
+.chart-side{min-width:0}
+.chart-side .tokcard{margin:0;border-top:0;padding-top:0}
+.chart-side .tokcard-head{min-width:0}
+.chart-side .tokcard-head>div{min-width:0;flex:1}
+.chart-side .tokcard-addr{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart-side .kgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.chart-side .kgrid .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1100px){.chart-body{grid-template-columns:1fr}.chart-wrap{min-height:320px}}
+@media(max-width:560px){.hgroup .chip{white-space:nowrap;font-size:11px;padding:5px 9px}.hgroup .chip:not(#monChip){display:none}.res-seg{width:100%;justify-content:space-between}.res-seg button{padding:6px 8px}.chart-price b{font-size:19px}}
 .pill.on{background:var(--ok-bg);color:var(--up)}
 .pill.off{background:var(--bad-bg);color:var(--down)}
 .pill.arm{background:var(--gold-soft);color:var(--gold-deep);border:1px solid var(--gold-line)}
@@ -315,6 +346,37 @@ body,header,.card,.chip,.li,input,select,button{transition:background-color .25s
 <main>
   <!-- ===== SWAP VIEW ===== -->
   <section class="view" id="view-swap">
+    <section class="card pad chart-card" id="chartCard" hidden>
+      <div class="chart-top">
+        <div class="chart-id">
+          <span class="ic" id="chIc"></span>
+          <div>
+            <div class="chart-name"><span id="chSym">—</span> <span class="chart-pair">/ USD</span> <span class="chart-src">GMGN</span></div>
+            <div class="chart-price"><b id="chPrice">—</b><span class="chg" id="chChg"></span></div>
+          </div>
+        </div>
+        <div class="res-seg" id="resSeg" role="tablist" aria-label="K 线周期">
+          <button role="tab" data-res="1m">1分</button><button role="tab" data-res="5m">5分</button><button role="tab" data-res="15m" class="on">15分</button><button role="tab" data-res="1h">1时</button><button role="tab" data-res="4h">4时</button><button role="tab" data-res="1d">日</button>
+        </div>
+      </div>
+      <div class="chart-body">
+        <div class="chart-wrap"><div id="chart" aria-label="K 线图"></div><div class="chart-msg" id="chartMsg"></div></div>
+        <aside class="chart-side">
+          <div class="tokcard" id="tokCard">
+          <div class="tokcard-head">
+            <span class="ic" id="tiIc"></span>
+            <div>
+              <div class="tokcard-name"><span id="tiName">—</span> <span class="tokcard-sym" id="tiSym"></span></div>
+              <div class="tokcard-addr mono" id="tiAddr"></div>
+            </div>
+            <span class="tokcard-lp" id="tiLp"></span>
+          </div>
+          <div class="kgrid" id="tiGrid"></div>
+          <div class="badges" id="tiBadges"></div>
+        </div>
+        </aside>
+      </div>
+    </section>
     <div class="grid-2">
       <section class="card gold pad">
         <div class="swap-top">
@@ -372,18 +434,6 @@ body,header,.card,.chip,.li,input,select,button{transition:background-color .25s
         <button class="cta" id="cta" onclick="doSwap()" disabled>输入数量</button>
         <div class="status" id="status"><span class="spin"></span><span id="statusText">准备就绪</span></div>
 
-        <div class="tokcard" id="tokCard">
-          <div class="tokcard-head">
-            <span class="ic" id="tiIc"></span>
-            <div>
-              <div class="tokcard-name"><span id="tiName">—</span> <span class="tokcard-sym" id="tiSym"></span></div>
-              <div class="tokcard-addr mono" id="tiAddr"></div>
-            </div>
-            <span class="tokcard-lp" id="tiLp"></span>
-          </div>
-          <div class="kgrid" id="tiGrid"></div>
-          <div class="badges" id="tiBadges"></div>
-        </div>
       </section>
 
       <div class="col">
@@ -470,6 +520,7 @@ body,header,.card,.chip,.li,input,select,button{transition:background-color .25s
   <div class="dlg-body" id="pickerList"></div>
 </dialog>
 
+<script src="/vendor/lightweight-charts.js"></script>
 <script src="/qrcode.js"></script>
 <script src="/panel.js"></script>
 <script>bootstrap();</script>

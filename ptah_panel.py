@@ -54,12 +54,29 @@ def _gmgn_key():
     return os.environ.get('GMGN_API_KEY', '')
 
 
+# GMGN bans the IP after repeated 429s, so every GMGN call shares one backoff.
+GMGN_BACKOFF = {'until': 0.0}
+
+
+def _gmgn_limited(stderr):
+    import time
+    if '429' in (stderr or '') or 'RATE_LIMIT' in (stderr or ''):
+        GMGN_BACKOFF['until'] = time.time() + 60
+        return True
+    return False
+
+
 def _gmgn(args, key):
     """Run one gmgn-cli call and return its parsed `data` dict, or None."""
+    import time
+    if time.time() < GMGN_BACKOFF['until']:
+        return None
     env = dict(os.environ, NODE_USE_ENV_PROXY='1', GMGN_API_KEY=key)
     try:
         p = subprocess.run(['gmgn-cli', *args, '--raw'], text=True, capture_output=True, timeout=25, env=env)
     except (subprocess.TimeoutExpired, OSError):
+        return None
+    if _gmgn_limited(p.stderr):
         return None
     txt = p.stdout.strip()
     try:
@@ -233,6 +250,65 @@ def valid_token(t):
     return bool(ADDR.fullmatch(t))
 
 
+# Static scripts served to the page: a fixed allowlist, never a user-supplied path.
+STATIC_JS = {'/panel.js': 'panel.js', '/qrcode.js': 'qrcode.js',
+             '/vendor/lightweight-charts.js': 'vendor/lightweight-charts.js'}
+
+# ---- GMGN K-line ----
+# Each resolution maps to a lookback window that returns ~100 candles (GMGN caps
+# a response at 100). Results are cached per (token, resolution) so tab switches
+# and the auto-refresh don't trip GMGN's rate limit (it bans the IP on repeats).
+KLINE_WINDOWS = {'1m': 6 * 3600, '5m': 2 * 86400, '15m': 7 * 86400, '1h': 30 * 86400,
+                 '4h': 14 * 86400, '1d': 365 * 86400}
+KLINE_TTL = {'1m': 20, '5m': 45, '15m': 90, '1h': 180, '4h': 300, '1d': 600}
+_KLINE_CACHE = {}
+
+
+def gmgn_kline(token, resolution):
+    import time
+    if resolution not in KLINE_WINDOWS:
+        return {'success': False, 'error': {'message': '不支持的周期'}}
+    key = (token.lower(), resolution)
+    now = time.time()
+    hit = _KLINE_CACHE.get(key)
+    if hit and now - hit['ts'] < KLINE_TTL[resolution]:
+        return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'ts': hit['ts']}}
+    if now < GMGN_BACKOFF['until']:
+        if hit:
+            return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'stale': True, 'ts': hit['ts']}}
+        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试'}}
+    gk = _gmgn_key()
+    if not gk:
+        return {'success': False, 'error': {'message': '未配置 GMGN API key，无法显示 K 线'}}
+    end = int(now)
+    env = dict(os.environ, NODE_USE_ENV_PROXY='1', GMGN_API_KEY=gk)
+    try:
+        p = subprocess.run(['gmgn-cli', 'market', 'kline', '--chain', 'bsc', '--address', token,
+                            '--resolution', resolution, '--from', str(end - KLINE_WINDOWS[resolution]),
+                            '--to', str(end), '--raw'], text=True, capture_output=True, timeout=25, env=env)
+    except (subprocess.TimeoutExpired, OSError):
+        return {'success': False, 'error': {'message': 'GMGN K 线请求超时'}}
+    if _gmgn_limited(p.stderr):
+        if hit:
+            return {'success': True, 'data': {'candles': hit['candles'], 'cached': True, 'stale': True, 'ts': hit['ts']}}
+        return {'success': False, 'error': {'message': 'GMGN 请求太频繁，稍后自动重试'}}
+    try:
+        d = json.loads(p.stdout)
+        rows = (d.get('data') or d).get('list') or []
+    except Exception:
+        return {'success': False, 'error': {'message': 'GMGN K 线返回异常'}}
+    candles = []
+    for r in rows:
+        try:
+            candles.append({'time': int(r['time']) // 1000, 'open': float(r['open']), 'high': float(r['high']),
+                            'low': float(r['low']), 'close': float(r['close']), 'volume': float(r.get('amount') or 0)})
+        except (KeyError, TypeError, ValueError):
+            continue
+    candles.sort(key=lambda c: c['time'])
+    _KLINE_CACHE[key] = {'ts': now, 'candles': candles}
+    return {'success': True, 'data': {'candles': candles, 'cached': False, 'ts': now}}
+
+
 _GP_CACHE = {'ts': 0.0, 'data': None}
 
 
@@ -329,6 +405,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 data = []
             return self.send({'success': True, 'data': data})
+        if path == '/kline':
+            token = query.get('token', [''])[0]
+            res = query.get('res', ['15m'])[0]
+            if not valid_token(token):
+                return self.send({'success': False, 'error': {'message': 'Invalid token address'}}, 400)
+            return self.send(gmgn_kline(token, res))
         if path == '/gang-progress':
             return self.send(gang_progress())
         if path == '/tokeninfo':
@@ -336,8 +418,8 @@ class Handler(BaseHTTPRequestHandler):
             if not valid_token(token):
                 return self.send({'success': False, 'error': {'message': 'Invalid token address'}}, 400)
             return self.send(token_info(token))
-        if path in ('/panel.js', '/qrcode.js'):
-            b = Path(__file__).with_name(path.lstrip('/')).read_bytes()
+        if path in STATIC_JS:
+            b = (Path(__file__).parent / STATIC_JS[path]).read_bytes()
             self.send_response(200)
             self.send_header('content-type', 'text/javascript; charset=utf-8')
             self.send_header('content-length', str(len(b)))

@@ -24,6 +24,7 @@
 
 ## 功能
 
+- **GMGN K 线**：兑换页顶部选中任意代币即显示 K 线图（1分 / 5分 / 15分 / 1时 / 4时 / 日），带成交量柱，右侧是代币信息卡。数据来自 GMGN（需配置 API key），服务端按周期缓存，避免触发 GMGN 限流；图表组件是 TradingView Lightweight Charts（Apache-2.0，本地内置在 `vendor/`）。
 - **暗夜模式**：右上角按钮一键切换，默认跟随系统设置，选择会记住；深色是暖石墨底配同款香槟金。
 - **充值二维码**：钱包余额卡里显示收款地址二维码和复制按钮，二维码由本地内置的 `qrcode.js`（qrcode-generator 1.4.4，MIT）生成，不依赖外部服务。
 - **gang.fun 毕业进度榜**：监控页显示 gang.fun 上最接近毕业的内盘币（进度、距毕业约多少 U、24h 成交量、持有人数），数据来自 gang.fun 公开接口，缓存 30 秒。
@@ -136,6 +137,7 @@ NODE_USE_ENV_PROXY=1 FOUR_ARM=1 FOUR_BUDGET_BNB=0.01 node four_watch.mjs
 | GET | `/meta?tokens=a,b` | 钱包余额 + 代币链上元数据 |
 | GET | `/tokeninfo?token=` | GMGN 行情/logo/税/风险 |
 | GET | `/orders` · `/order?id=` | 订单历史 / 单条 |
+| GET | `/kline?token=&res=` | GMGN K 线（res：1m / 5m / 15m / 1h / 4h / 1d，服务端缓存） |
 | GET | `/gang-progress` | gang.fun 内盘毕业进度（缓存 30 秒） |
 | GET | `/route?token=` | 识别代币所属平台和路由 |
 | GET | `/status` | 监控状态（面板仪表盘读） |
