@@ -59,7 +59,7 @@ four_watch.mjs  (独立后台进程)
 | `openfour_check.mjs` | Four.meme V12 模板只读核查（注册/preset/NFT/能否买模拟） |
 | `four_watch.mjs` | 抢购监控 + 自动买入 + 10 倍提醒 + 状态/事件落盘 |
 | `AGENT钱包工作台prompt.txt` | 复刻用的完整提示词，丢给 AI 即可从零做出同款面板 |
-| `stock_snipe.mjs` | 股票底池狙击：监控 four.meme 工厂合约新币，底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 的立刻 BNB→股票币→曲线买入 |
+| `stock_snipe.mjs` | 股票底池狙击：监控 four.meme Agent ID 模板新币，底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 的立刻 BNB→股票币→曲线买入 |
 | `routes.mjs` | 平台识别 + 曲线直调（AgentPad/Gang/MOAT/Flap Agent/UNITS）买卖适配 |
 
 ---
@@ -91,7 +91,7 @@ four_watch.mjs  (独立后台进程)
 
 ## 股票底池狙击（stock_snipe.mjs）
 
-监控 four.meme 的 OpenFourCore 工厂合约，不限模板。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一就立刻买入：
+只监控 four.meme 的「Binance Agent ID Exclusive」模板（`1778027615735`，需持 Agent ID NFT 才能交易）。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一就立刻买入。模板可用 `SNIPE_PRESET` 改：
 
 | 股票代币 | 合约 |
 |---|---|
