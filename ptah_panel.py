@@ -186,6 +186,21 @@ def bnb_usdt_price():
         return _bnb_px['v']
 
 
+def _float_safe_qty(qty):
+    """Short amounts pass through unchanged. Amounts with more than 15 significant
+    digits (exact on-chain balances) are cut down to 15 digits, so the float the
+    order service reads can't land above the wallet balance."""
+    from decimal import Decimal, ROUND_DOWN
+    d = Decimal(qty)
+    if d <= 0 or len(d.normalize().as_tuple().digits) <= 15:
+        return qty
+    step = Decimal(1).scaleb(d.adjusted() - 14)
+    q = d.quantize(step, rounding=ROUND_DOWN)
+    while Decimal(float(q)) > d:
+        q -= step
+    return format(q.normalize(), 'f')
+
+
 def run_node(script, *args, timeout=35):
     p = subprocess.run(["node", str(Path(__file__).with_name(script)), *args],
                        capture_output=True, text=True, timeout=timeout, env=_env())
@@ -366,8 +381,13 @@ class Handler(BaseHTTPRequestHandler):
                         t['data']['txHash'] = res.get('txHash') if isinstance(res, dict) else None
                         t['data']['venue'] = 'direct'
                     return self.send(t)
+            # Binance's order service parses the amount as a binary float. 18-digit
+            # balances like 0.994356859689711303 round *up* (to …711325), which it
+            # then rejects as more than the wallet holds. Send the largest 15-digit
+            # value that doesn't exceed what the user typed.
+            qty_api = _float_safe_qty(qty)
             args = ['market-order', 'quote' if self.path == '/quote' else 'swap',
-                    '--binanceChainId', CHAIN, '--fromTokenQty', qty,
+                    '--binanceChainId', CHAIN, '--fromTokenQty', qty_api,
                     '--fromToken', source, '--toToken', target, '--slippage', str(sl)]
             if self.path == '/swap':
                 gas = d.get('gasLevel', 'HIGH')
