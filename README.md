@@ -59,7 +59,6 @@ four_watch.mjs  (独立后台进程)
 | `openfour_check.mjs` | Four.meme V12 模板只读核查（注册/preset/NFT/能否买模拟） |
 | `four_watch.mjs` | 抢购监控 + 自动买入 + 10 倍提醒 + 状态/事件落盘 |
 | `AGENT钱包工作台prompt.txt` | 复刻用的完整提示词，丢给 AI 即可从零做出同款面板 |
-| `stock_snipe.mjs` | 股票底池狙击：Agent ID 模板新币底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 时买满 1%，可转移后自动转出 |
 | `routes.mjs` | 平台识别 + 曲线直调（AgentPad/Gang/MOAT/Flap Agent/UNITS）买卖适配 |
 
 ---
@@ -88,50 +87,6 @@ four_watch.mjs  (独立后台进程)
 **直调交易的记录**：直调交易不经过 baw 的订单簿，面板在浏览器 localStorage 里另存一份，和 baw 订单合并显示在历史记录里，带平台标签和 Tx 链接。
 
 新增平台：在 `routes.mjs` 的 `PLATFORMS` 加合约地址，在 `detect()` 加识别规则，在 `quote()` / `trade()` 加对应的报价和买卖调用即可（见下方 DIY 指南 B）。
-
-## 股票底池狙击（stock_snipe.mjs）
-
-只监控 four.meme 的「Binance Agent ID Exclusive」模板（`1778027615735`，需持 Agent ID NFT 才能交易），每 0.5 秒轮询一次新区块，并同时订阅 WSS 新区块。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一，就买入：
-
-| 股票代币 | 合约 |
-|---|---|
-| BNC4 | `0x7c8d5502b544ddaf8852fc46d1174e34876d545c` |
-| NVDAB | `0x02fca66c1d1afb4e2a7884261eb00f63598a7436` |
-| BNCB | `0x4902c5ebc598265ed2212b559b042de8a5eeec3f` |
-| SPCXB | `0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1` |
-| SKHYB | `0xca750ef65f295bbecd685abf54e82caf297bdb61` |
-
-规则：
-- **每个币买满 1%**：精确买 10,000,000 个（单钱包上限），调 `OpenFourCore.buy(token, 数量, 最多支付, 0, 0x)`，最多支付 = 报价成本 + 10% 余量。
-- **先用钱包里现有的股票代币**；不够就用 baw 把 BNB 换成对应股票代币补足差额，再买。
-- **提速**：实盘启动时，按钱包里每种股票代币的持有量各授权一次给 OpenFourCore（不做无限授权）；余额和授权额度在后台每 5 秒缓存一次。命中新币时只读一次曲线报价，钱包里的股票代币够付就直接发买入，不再临时授权或换币。
-- **只买最先出来的 6 个**，买满停止。
-- **内盘结束、可以转账后**（`tokenPhase` 不再是 1），自动把这个币的全部持仓转到 `SNIPE_FORWARD_TO`。
-
-```bash
-# 模拟（只报价不下单）
-NODE_USE_ENV_PROXY=1 node stock_snipe.mjs
-# 实盘
-NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_FORWARD_TO=0x你的地址 node stock_snipe.mjs
-# 回放历史区块（可选第三个参数覆盖模板）
-NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock> [presetId]
-```
-
-**在面板里启动 / 暂停**：「抢购监控」页面有「启动狙击 / 暂停狙击」按钮。启动参数（用哪个 baw、实盘还是模拟、买入数量、转出地址等）读自 `~/.config/stock-snipe-launch.json`，字段名同上面的环境变量。启动前会先检查狙击钱包是否已登录，没登录会直接提示，不会启动。
-
-可调参数：`SNIPE_BAW`（用哪个 baw，默认 `baw`）、`SNIPE_STATE`（状态文件）、`SNIPE_MAX`（默认 6）、`SNIPE_TARGET`（默认 10000000）、`SNIPE_POLL_MS`（默认 500）、`SNIPE_SLIPPAGE`（默认 10）。
-
-### 用第二个钱包跑狙击（和面板的钱包分开）
-
-baw 支持用 `BINANCE_BAW_DIR` 指定独立的登录目录。复制一份 baw，去掉它的系统钥匙串模块，让它把登录信息只存在自己的目录里，两个钱包就能同时登录、互不影响：
-
-```bash
-PKG=$(dirname $(dirname $(readlink -f $(which baw))))
-mkdir -p ~/.baw2-cli/bin ~/.baw2 && cp -R "$PKG" ~/.baw2-cli/pkg && rm -rf ~/.baw2-cli/pkg/node_modules/@github/keytar
-printf '#!/bin/bash\nexport BINANCE_BAW_DIR="$HOME/.baw2"\nexec node "$HOME/.baw2-cli/pkg/dist/index.js" "$@"\n' > ~/.baw2-cli/bin/baw && chmod +x ~/.baw2-cli/bin/baw
-~/.baw2-cli/bin/baw auth signin          # 用第二个钱包扫码
-SNIPE_BAW=~/.baw2-cli/bin/baw SNIPE_STATE=~/.config/stock-snipe-state-w2.json NODE_USE_ENV_PROXY=1 node stock_snipe.mjs
-```
 
 
 ## 依赖与前置

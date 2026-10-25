@@ -211,75 +211,6 @@ def _bg_preapprove(token):
         pass
 
 
-SNIPE_SCRIPT = Path(__file__).with_name('stock_snipe.mjs')
-SNIPE_LAUNCH = Path.home() / '.config/stock-snipe-launch.json'
-SNIPE_PIDFILE = Path.home() / '.config/stock-snipe.pid'
-SNIPE_LOG = Path('/tmp/stock_snipe.log')
-SNIPE_KEYS = ('SNIPE_ARM', 'SNIPE_BAW', 'SNIPE_STATE', 'SNIPE_MAX', 'SNIPE_TARGET',
-              'SNIPE_POLL_MS', 'SNIPE_SLIPPAGE', 'SNIPE_FORWARD_TO', 'SNIPE_PRESET')
-
-
-def _snipe_pid():
-    """PID of the running sniper, verified to really be stock_snipe.mjs (not a recycled pid)."""
-    try:
-        pid = int(SNIPE_PIDFILE.read_text().strip())
-    except (OSError, ValueError):
-        pid = None
-    if pid:
-        try:
-            cmd = subprocess.run(['ps', '-o', 'command=', '-p', str(pid)], capture_output=True, text=True).stdout
-            if 'stock_snipe.mjs' in cmd:
-                return pid
-        except OSError:
-            pass
-    # started outside the panel (terminal): find it by command line
-    try:
-        out = subprocess.run(['pgrep', '-f', 'node .*stock_snipe.mjs'], capture_output=True, text=True).stdout.split()
-        return int(out[0]) if out else None
-    except (OSError, ValueError):
-        return None
-
-
-def snipe_start():
-    if _snipe_pid():
-        return {'success': True, 'data': {'running': True, 'note': 'already running'}}
-    try:
-        cfg = json.loads(SNIPE_LAUNCH.read_text())
-    except (OSError, ValueError):
-        return {'success': False, 'error': {'message': '缺少 ~/.config/stock-snipe-launch.json 启动配置'}}
-    env = dict(_env(), NODE_USE_ENV_PROXY='1')
-    env.update({k: str(v) for k, v in cfg.items() if k in SNIPE_KEYS})
-    baw = env.get('SNIPE_BAW', 'baw')
-    st = subprocess.run([baw, 'wallet', 'status', '--json'], capture_output=True, text=True, env=env, timeout=30).stdout
-    if 'CONNECTED' not in st or 'UNCONNECTED' in st:
-        return {'success': False, 'error': {'message': '狙击钱包未登录，请先扫码登录'}}
-    log = open(SNIPE_LOG, 'a')
-    proc = subprocess.Popen(['node', str(SNIPE_SCRIPT)], cwd=str(SNIPE_SCRIPT.parent), env=env,
-                            stdout=log, stderr=log, start_new_session=True)
-    SNIPE_PIDFILE.write_text(str(proc.pid))
-    return {'success': True, 'data': {'running': True, 'pid': proc.pid}}
-
-
-def snipe_stop():
-    import signal
-    pid = _snipe_pid()
-    if not pid:
-        return {'success': True, 'data': {'running': False, 'note': 'not running'}}
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError as e:
-        return {'success': False, 'error': {'message': str(e)}}
-    for _ in range(20):
-        if not _snipe_pid():
-            break
-        __import__('time').sleep(0.25)
-    try:
-        SNIPE_PIDFILE.unlink()
-    except OSError:
-        pass
-    return {'success': True, 'data': {'running': False}}
-
-
 def run_node(script, *args, timeout=35):
     p = subprocess.run(["node", str(Path(__file__).with_name(script)), *args],
                        capture_output=True, text=True, timeout=timeout, env=_env())
@@ -349,22 +280,13 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send({'success': False, 'error': {'message': str(e)}}, 502)
         if path == '/status':
-            # Prefer the stock-pool sniper (it may run on a separate wallet); fall
-            # back to the original four_watch monitor. Live = heartbeat within 20s.
-            now_ms = __import__('time').time() * 1000
-            def _read(name):
-                fp = Path.home() / '.config' / name
-                try:
-                    return json.loads(fp.read_text()) if fp.exists() else None
-                except Exception:
-                    return None
-            sn, fw = _read('stock-snipe-status.json'), _read('four-watch-status.json')
-            sn_live = bool(sn and now_ms - sn.get('ts', 0) < 20000)
-            fw_live = bool(fw and now_ms - fw.get('ts', 0) < 20000)
-            running = bool(_snipe_pid())
-            if sn and (sn_live or running or not fw_live):
-                return self.send({'success': True, 'data': {'live': sn_live and running, 'running': running, 'kind': 'stock_snipe', 'status': sn}})
-            return self.send({'success': True, 'data': {'live': fw_live, 'kind': 'four_watch', 'status': fw}})
+            sp = Path.home() / '.config/four-watch-status.json'
+            try:
+                st = json.loads(sp.read_text()) if sp.exists() else None
+            except Exception:
+                st = None
+            live = bool(st and (__import__('time').time() * 1000 - st.get('ts', 0) < 20000))
+            return self.send({'success': True, 'data': {'live': live, 'kind': 'four_watch', 'status': st}})
         if path == '/events':
             ep = Path.home() / '.config/four-watch-events.json'
             try:
@@ -417,10 +339,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send({'success': False, 'error': {'message': str(e)}}, 502)
 
-        if self.path == '/snipe/start':
-            return self.send(snipe_start())
-        if self.path == '/snipe/stop':
-            return self.send(snipe_stop())
         if self.path in ('/quote', '/swap'):
             source = resolve_token(d.get('fromToken'))
             target = resolve_token(d.get('toToken'))
