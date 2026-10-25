@@ -27,7 +27,7 @@ const KNOWN = {};
 for (const t of DEFAULT_TOKENS) KNOWN[t.address.toLowerCase()] = {decimals: 18, ...t, symbolShort: t.symbol};
 const PLATFORM_NAMES = {
   fourmeme: 'four.meme', fouragent: 'four.meme Agent 专属', flap: 'Flap', flapagent: 'Flap Agent', agentpad: 'AgentPad', gang: 'Gang',
-  gangpair: 'Gang Pair', cycpad: 'Cycpad', moat: 'MOAT', units: 'UNITS', pancake: '外盘 PancakeSwap',
+  gangpair: 'Gang Pair', gangv2: 'Gang V2', cycpad: 'Cycpad', moat: 'MOAT', units: 'UNITS', pancake: '外盘 PancakeSwap',
 };
 const PAIRS = [['USDT', 'BNB', 'USDT → BNB'], ['BNB', 'USDT', 'BNB → USDT']];
 
@@ -187,6 +187,10 @@ function usePct(frac) {
   if (!isFinite(avail) || avail <= 0) return;
   // On native BNB reserve 0.001 for gas from the spendable base, then take the fraction.
   if (k === BNB.toLowerCase()) avail = Math.max(0, avail - 0.001);
+  // 最大 on a token: use the exact on-chain balance string. Float rounding here
+  // used to leave dust above the approved amount (approve 1195004 vs balance
+  // 1195004.0491…), which made curve sells revert with ERC20InsufficientAllowance.
+  if (frac === 1 && k !== BNB.toLowerCase()) { $('fromAmt').value = String(raw); scheduleQuote(); return; }
   const amt = avail * frac;
   if (amt <= 0) return;
   // trim float noise; keep enough precision for small-decimal tokens
