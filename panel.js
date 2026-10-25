@@ -179,22 +179,30 @@ function renderBalances() {
     list.appendChild(el);
   }
 }
+// Exact decimal math on balance strings (no floats): parse to an integer of
+// 10^-18 units, scale by an integer percentage, format back without rounding.
+const DEC = 18n;
+function toUnits(str) {
+  const [a, b = ''] = String(str).trim().split('.');
+  return BigInt(a || '0') * 10n ** DEC + BigInt((b + '0'.repeat(Number(DEC))).slice(0, Number(DEC)) || '0');
+}
+function fromUnits(u) {
+  const s = u.toString().padStart(Number(DEC) + 1, '0');
+  const i = s.slice(0, -Number(DEC)), f = s.slice(-Number(DEC)).replace(/0+$/, '');
+  return f ? i + '.' + f : i;
+}
 function usePct(frac) {
   state.allSelected = frac === 1;
   const k = state.from.toLowerCase(), raw = state.balances[k];
   if (raw == null) return;
-  let avail = parseFloat(raw);
-  if (!isFinite(avail) || avail <= 0) return;
-  // On native BNB reserve 0.001 for gas from the spendable base, then take the fraction.
-  if (k === BNB.toLowerCase()) avail = Math.max(0, avail - 0.001);
-  // 最大 on a token: use the exact on-chain balance string. Float rounding here
-  // used to leave dust above the approved amount (approve 1195004 vs balance
-  // 1195004.0491…), which made curve sells revert with ERC20InsufficientAllowance.
-  if (frac === 1 && k !== BNB.toLowerCase()) { $('fromAmt').value = String(raw); scheduleQuote(); return; }
-  const amt = avail * frac;
-  if (amt <= 0) return;
-  // trim float noise; keep enough precision for small-decimal tokens
-  $('fromAmt').value = Number(amt.toPrecision(12)).toString();
+  let avail = toUnits(raw);
+  // native BNB: keep 0.001 back for gas
+  if (k === BNB.toLowerCase()) avail = avail > 10n ** 15n ? avail - 10n ** 15n : 0n;
+  if (avail <= 0n) return;
+  const pct = BigInt(Math.round(frac * 100));
+  const amt = pct === 100n ? avail : avail * pct / 100n;
+  if (amt <= 0n) return;
+  $('fromAmt').value = fromUnits(amt);
   scheduleQuote();
 }
 

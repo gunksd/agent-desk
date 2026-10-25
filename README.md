@@ -59,7 +59,7 @@ four_watch.mjs  (独立后台进程)
 | `openfour_check.mjs` | Four.meme V12 模板只读核查（注册/preset/NFT/能否买模拟） |
 | `four_watch.mjs` | 抢购监控 + 自动买入 + 10 倍提醒 + 状态/事件落盘 |
 | `AGENT钱包工作台prompt.txt` | 复刻用的完整提示词，丢给 AI 即可从零做出同款面板 |
-| `stock_snipe.mjs` | 股票底池狙击：监控 four.meme Agent ID 模板新币，底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 的立刻 BNB→股票币→曲线买入 |
+| `stock_snipe.mjs` | 股票底池狙击：Agent ID 模板新币底池是 BNC4/NVDAB/BNCB/SPCXB/SKHYB 时买满 1%，可转移后自动转出 |
 | `routes.mjs` | 平台识别 + 曲线直调（AgentPad/Gang/MOAT/Flap Agent/UNITS）买卖适配 |
 
 ---
@@ -91,7 +91,7 @@ four_watch.mjs  (独立后台进程)
 
 ## 股票底池狙击（stock_snipe.mjs）
 
-只监控 four.meme 的「Binance Agent ID Exclusive」模板（`1778027615735`，需持 Agent ID NFT 才能交易）。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一就立刻买入。模板可用 `SNIPE_PRESET` 改：
+只监控 four.meme 的「Binance Agent ID Exclusive」模板（`1778027615735`，需持 Agent ID NFT 才能交易），每 0.5 秒轮询一次新区块，并同时订阅 WSS 新区块。每出一个新币，直接从 `TokenCreated` 事件里读它的底池代币；底池是下面这几种股票代币之一，就买入：
 
 | 股票代币 | 合约 |
 |---|---|
@@ -101,18 +101,22 @@ four_watch.mjs  (独立后台进程)
 | SPCXB | `0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1` |
 | SKHYB | `0xca750ef65f295bbecd685abf54e82caf297bdb61` |
 
-买入路径：先只读报价，确认曲线能买；然后用 baw 聚合把 BNB 换成对应股票代币，按实际到账数量单独授权给工厂合约，最后调 `buyByBudget` 在内盘买入。买满设定个数后停止。
+规则：
+- **每个币买满 1%**：精确买 10,000,000 个（单钱包上限），调 `OpenFourCore.buy(token, 数量, 最多支付, 0, 0x)`，最多支付 = 报价成本 + 10% 余量。
+- **先用钱包里现有的股票代币**；不够就用 baw 把 BNB 换成对应股票代币补足差额，再买。
+- **只买最先出来的 6 个**，买满停止。
+- **内盘结束、可以转账后**（`tokenPhase` 不再是 1），自动把这个币的全部持仓转到 `SNIPE_FORWARD_TO`。
 
 ```bash
-# 先模拟（只报价不下单）
-NODE_USE_ENV_PROXY=1 SNIPE_BUDGET_BNB=0.02 SNIPE_MAX=10 node stock_snipe.mjs
+# 模拟（只报价不下单）
+NODE_USE_ENV_PROXY=1 node stock_snipe.mjs
 # 实盘
-NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_BUDGET_BNB=0.02 SNIPE_MAX=10 node stock_snipe.mjs
-# 回放历史区块，检查识别和报价
-NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock>
+NODE_USE_ENV_PROXY=1 SNIPE_ARM=1 SNIPE_FORWARD_TO=0x你的地址 node stock_snipe.mjs
+# 回放历史区块（可选第三个参数覆盖模板）
+NODE_USE_ENV_PROXY=1 node stock_snipe.mjs replay <fromBlock> <toBlock> [presetId]
 ```
 
-一笔要依次过 换币 → 授权 → 买入 三笔交易，从发现到买入成交大约十几秒，比纯 BNB 底池慢。
+可调参数：`SNIPE_MAX`（默认 6）、`SNIPE_TARGET`（默认 10000000）、`SNIPE_POLL_MS`（默认 500）、`SNIPE_SLIPPAGE`（默认 10）。
 
 ## 依赖与前置
 

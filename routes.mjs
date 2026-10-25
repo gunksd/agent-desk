@@ -226,9 +226,6 @@ export async function quote(ca, side, amount) {
       ? BigInt((await tryCall(r.market, enc('sharesOf(address)', me))) || '0x0')
       : await balanceOf(r.platform === 'units' ? r.token : ca, me);
     inAmt = amount === 'all' ? bal : toWei(amount);
-    // Within 0.01% of the full balance → sell exactly the balance, so float-rounded
-    // inputs don't leave dust or ask for more than was approved.
-    if (amount !== 'all' && bal > 0n && (inAmt > bal ? inAmt - bal : bal - inAmt) * 10000n <= bal) inAmt = bal;
     if (inAmt > bal) throw new Error('卖出数量超过持仓');
     if (r.platform === 'fouragent') {
       const w = words(await call(r.tools, enc('estimateSell(address,address,uint256,uint256,bytes)', ca, me, inAmt, 0n, 160n, 0n)));
